@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
 function fallback(input:{url:string;goal:string;budget:string;country:string}, text:string){
  const isVitals=/vitals-arcade|arcade|game/i.test(input.url+' '+text);
@@ -9,9 +9,20 @@ function fallback(input:{url:string;goal:string;budget:string;country:string}, t
 }
 
 export async function POST(req:Request){
- try{const input=await req.json();if(!input.url||!/^https?:\\/\\//i.test(input.url))return NextResponse.json({error:'Enter a valid http(s) URL.'},{status:400});
-  let page='';try{const r=await fetch(input.url,{headers:{'user-agent':'AdPilotBot/0.1'},signal:AbortSignal.timeout(8000)});page=(await r.text()).slice(0,18000)}catch{}
-  if(process.env.OPENAI_API_KEY){const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const prompt=`You are AdPilot, an advertising strategist. Analyze this website text and return ONLY valid JSON with keys brand,url,summary,audience, hooks, ads, channels,budget,tracking,nextSteps,aiMode. ads must be 3 objects with headline,text,cta. Make claims only supported by the site. Goal: ${input.goal}; country: ${input.country}; daily budget USD: ${input.budget}. Never frame entertainment products as medical or diagnostic tools. Website: ${input.url}\nTEXT:\n${page}`;const completion=await client.chat.completions.create({model:process.env.OPENAI_MODEL||'gpt-4o-mini',response_format:{type:'json_object'},messages:[{role:'system',content:'Return concise campaign strategy JSON.'},{role:'user',content:prompt}]});const data=JSON.parse(completion.choices[0]?.message?.content||'{}');return NextResponse.json({...data,url:input.url,budget:String(input.budget),aiMode:'OPENAI MODE'});}
+ try{
+  const input=await req.json();
+  if(!input.url||!/^https?:\/\//i.test(input.url)) return NextResponse.json({error:'Enter a valid http(s) URL.'},{status:400});
+  let page='';
+  try{const r=await fetch(input.url,{headers:{'user-agent':'AdPilotBot/0.2'},signal:AbortSignal.timeout(8000)});page=(await r.text()).slice(0,18000)}catch{}
+  const apiKey=process.env.GEMINI_API_KEY||process.env.GOOGLE_GEMINI_API_KEY;
+  if(apiKey){
+   const ai=new GoogleGenAI({apiKey});
+   const prompt=`You are AdPilot, an advertising strategist. Analyze the supplied website text and return ONLY valid JSON with keys brand,url,summary,audience,hooks,ads,channels,budget,tracking,nextSteps,aiMode. ads must be 3 objects with headline,text,cta. Make claims only supported by the site. Goal: ${input.goal}; country: ${input.country}; daily budget USD: ${input.budget}. Never frame entertainment products as medical or diagnostic tools. Recommend a small test before scaling. Website: ${input.url}\nTEXT:\n${page}`;
+   const response=await ai.models.generateContent({model:process.env.GEMINI_MODEL||'gemini-2.5-flash-lite',contents:prompt,config:{responseMimeType:'application/json',temperature:0.4}});
+   const raw=response.text||'{}';
+   const data=JSON.parse(raw.replace(/^```json\s*/,'').replace(/\s*```$/,''));
+   return NextResponse.json({...data,url:input.url,budget:String(input.budget),aiMode:'GEMINI MODE'});
+  }
   return NextResponse.json(fallback(input,page));
  }catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Unable to analyze website.'},{status:500})}
 }
