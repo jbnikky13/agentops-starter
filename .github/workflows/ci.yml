@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          GEMINI_API_KEY: ci-placeholder
+          TOKEN_ENCRYPTION_KEY: ci-placeholder
+          GOOGLE_ADS_DEVELOPER_TOKEN: ci-placeholder
+          GOOGLE_ADS_CLIENT_ID: ci-placeholder
+          GOOGLE_ADS_CLIENT_SECRET: ci-placeholder
+          GOOGLE_ADS_REDIRECT_URI: https://example.com/api/google-ads/callback
